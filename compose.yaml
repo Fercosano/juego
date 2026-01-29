@@ -15,9 +15,14 @@ services:
       start_period: 60s
     volumes:
       - database_data:/var/lib/postgresql/data:rw
-      # You may use a bind-mounted host directory instead, so that it is harder to accidentally remove the volume and lose all your data!
-      # - ./docker/db/data:/var/lib/postgresql/data:rw
 ###< doctrine/doctrine-bundle ###
+
+  # MailHog para capturar correos 
+  mailhog:
+    image: mailhog/mailhog
+    ports:
+      - "1025:1025" # Puerto SMTP para que Symfony envíe correos 
+      - "8025:8025" # Interfaz Web para ver los correos en el navegador
 
 volumes:
 ###> doctrine/doctrine-bundle ###
