@@ -1,20 +1,79 @@
 {% extends 'base.html.twig' %}
 
-{% block title %}Hello HomeController!{% endblock %}
+{% block title %}Hello world! Party - Inicio{% endblock %}
 
 {% block body %}
 <style>
-    .example-wrapper { margin: 1em auto; max-width: 800px; width: 95%; font: 18px/1.5 sans-serif; }
-    .example-wrapper code { background: #F5F5F5; padding: 2px 6px; }
+   
+body {
+   
+    background: linear-gradient(135deg, #1e3c72 0%, #2a5298 50%, #702082 100%);
+    margin: 0;
+    height: 100vh;
+}
+    /* Contenedor principal que centra todo en pantalla */
+    .menu-wrapper {
+        height: 90vh;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        font-family: 'Arial Rounded MT Bold', 'Helvetica', sans-serif;
+    }
+
+    /* Título con estilo de videojuego (Mario Party style) */
+    .game-title {
+        font-size: 5rem;
+        color: #FFFFFF;
+        text-align: center;
+        text-transform: uppercase;
+        line-height: 0.9;
+        margin-bottom: 3rem;
+        text-shadow: 
+            4px 4px 0px #FF4500, 
+            8px 8px 0px #222;
+        animation: swing 3s ease-in-out infinite;
+    }
+
+    /* Botón de inicio llamativo */
+    .btn-play {
+        padding: 20px 50px;
+        font-size: 2rem;
+        background-color: #FFCC00;
+        color: #222;
+        border: none;
+        border-radius: 50px;
+        font-weight: bold;
+        text-decoration: none;
+        box-shadow: 0 10px 0 #CCA300;
+        transition: all 0.1s ease;
+    }
+
+    .btn-play:hover {
+        transform: scale(1.1);
+        background-color: #FFD633;
+    }
+
+    .btn-play:active {
+        transform: translateY(5px);
+        box-shadow: 0 5px 0 #CCA300;
+    }
+
+    /* Animación para el título */
+    @keyframes swing {
+        0%, 100% { transform: rotate(-3deg); }
+        50% { transform: rotate(3deg); }
+    }
 </style>
 
-<div class="example-wrapper">
-    <h1>Hello {{ controller_name }}! ✅</h1>
+<div class="menu-wrapper">
+    <h1 class="game-title">
+        Hello world!<br>
+        <span style="font-size: 3.5rem; color: #FFCC00;">Party</span>
+    </h1>
 
-    This friendly message is coming from:
-    <ul>
-        <li>Your controller at <code>/home/usua5pc21/Escritorio/mi_tfg/juego/src/Controller/HomeController.php</code></li>
-        <li>Your template at <code>/home/usua5pc21/Escritorio/mi_tfg/juego/templates/home/index.html.twig</code></li>
-    </ul>
+    <a href="{{ path('app_game') }}" class="btn-play">
+        ¡COMENZAR!
+    </a>
 </div>
 {% endblock %}
