@@ -1,0 +1,278 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Nivel {{ level_id }} - Laberinto de Variables{% endblock %}
+
+{% block stylesheets %}
+    {{ parent() }}
+    <link rel="stylesheet" href="{{ asset('css/game.css') }}">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+{% endblock %}
+
+{% block body %}
+<div class="game-container">
+    <div class="game-header">
+        <a href="{{ path('app_game') }}" class="back-btn"><i class="fas fa-arrow-left"></i> Mapa</a>
+        
+        <div class="score-board">
+            <div class="score-item"><i class="fas fa-shoe-prints"></i> Pasos: <span id="steps-val">0</span></div>
+            <div class="score-item"><i class="fas fa-star"></i> Puntos: <span id="score-val">1000</span></div>
+        </div>
+
+        <div><i class="fas fa-arrows-alt"></i> Mover</div>
+    </div>
+
+    <!-- World Grid -->
+    <div class="game-canvas" id="world-grid"></div>
+</div>
+
+<!-- Combat Modal -->
+<div class="combat-overlay" id="combat-overlay">
+    <div class="combat-modal">
+        <div class="combat-header">
+            <div class="combat-title"><i class="fas fa-bug"></i> COMBATE</div>
+            <div class="combat-task" id="combat-task">Misión: ...</div>
+        </div>
+        <div class="combat-body">
+            <!-- Palette (Dynamic) -->
+            <div class="palette-area" id="palette-area">
+                <!-- Blocks injected by JS -->
+            </div>
+
+            <!-- Workspace -->
+            <div class="coding-area">
+                <div style="color: #555; margin-bottom: 5px;">&lt;?php</div>
+                <div class="workspace" id="workspace"></div>
+                <button class="btn-run" onclick="runCombatCode()">
+                    <i class="fas fa-play"></i> Ejecutar
+                </button>
+            </div>
+        </div>
+        <!-- Console -->
+        <div class="console-area" id="console-output">
+            System ready...
+        </div>
+    </div>
+</div>
+
+<script>
+    // --- Configuration ---
+    const gridSize = 10;
+    
+    // 0 = Path, 1 = Wall
+    const mazeLayout = [
+        [0, 0, 1, 0, 0, 0, 0, 1, 0, 0],
+        [1, 0, 1, 0, 1, 1, 0, 1, 0, 1],
+        [0, 0, 0, 0, 1, 0, 0, 0, 0, 0],
+        [0, 1, 1, 1, 1, 0, 1, 1, 1, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 1, 0],
+        [1, 1, 1, 0, 1, 1, 1, 0, 0, 0],
+        [0, 0, 0, 0, 1, 0, 0, 0, 1, 1],
+        [0, 1, 1, 1, 1, 0, 1, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 1, 1, 1, 0],
+        [0, 1, 0, 0, 0, 0, 0, 0, 0, 0]
+    ];
+
+    let playerPos = { x: 0, y: 0 };
+    const goalPos = { x: 9, y: 9 };
+    
+    // Bugs with Difficulty & Puzzles
+    let bugs = [
+        { 
+            id: 1, x: 3, y: 2, alive: true, type: 'easy', 
+            task: 'Imprime un saludo',
+            solution: ['echo', 'string', 'semicolon'],
+            blocks: [
+                { type: 'echo', html: '<span class="token-keyword">echo</span>' },
+                { type: 'string', html: '<span class="token-string">"¡Hola!"</span>' },
+                { type: 'semicolon', html: '<span class="token-punct">;</span>' },
+                { type: 'print', html: '<span class="token-keyword">print</span>' }, // Distractor
+                { type: 'num', html: '<span class="token-num">1</span>' }          // Distractor
+            ]
+        },
+        { 
+            id: 2, x: 7, y: 6, alive: true, type: 'medium',
+            task: 'Asigna 10 a $x',
+            solution: ['var_x', 'equal', 'num_10', 'semicolon'],
+            blocks: [
+                { type: 'var_x', html: '<span class="token-var">$x</span>' },
+                { type: 'equal', html: '<span class="token-punct">=</span>' },
+                { type: 'num_10', html: '<span class="token-num">10</span>' },
+                { type: 'semicolon', html: '<span class="token-punct">;</span>' },
+                { type: 'var_y', html: '<span class="token-var">$y</span>' }, // Distractor
+                { type: 'num_5', html: '<span class="token-num">5</span>' }   // Distractor
+            ]
+        },
+        { 
+            id: 3, x: 8, y: 9, alive: true, type: 'boss', // Near goal
+            task: 'Suma 5 + 5 en $res',
+            solution: ['var_res', 'equal', 'num_5', 'plus', 'num_5', 'semicolon'],
+            blocks: [
+                { type: 'var_res', html: '<span class="token-var">$res</span>' },
+                { type: 'equal', html: '<span class="token-punct">=</span>' },
+                { type: 'num_5', html: '<span class="token-num">5</span>' },
+                { type: 'plus', html: '<span class="token-punct">+</span>' },
+                { type: 'semicolon', html: '<span class="token-punct">;</span>' },
+                { type: 'minus', html: '<span class="token-punct">-</span>' } // Distractor
+            ]
+        }
+    ];
+
+    let activeBug = null;
+    let steps = 0;
+    let score = 1000;
+
+    // --- Init World ---
+    const gridEl = document.getElementById('world-grid');
+    const stepsEl = document.getElementById('steps-val');
+    const scoreEl = document.getElementById('score-val');
+
+    function drawWorld() {
+        gridEl.innerHTML = '';
+        for (let y = 0; y < gridSize; y++) {
+            for (let x = 0; x < gridSize; x++) {
+                const cell = document.createElement('div');
+                cell.classList.add('grid-cell');
+                
+                // Walls
+                if (mazeLayout[y][x] === 1) {
+                    cell.classList.add('wall');
+                } else {
+                    // Logic for entities on path
+                    if (playerPos.x === x && playerPos.y === y) {
+                        cell.innerHTML = '<div class="player">🤖</div>';
+                    } else if (goalPos.x === x && goalPos.y === y) {
+                        cell.innerHTML = '<div class="goal">🚩</div>';
+                    } else {
+                        const bug = bugs.find(b => b.x === x && b.y === y && b.alive);
+                        if (bug) {
+                            cell.innerHTML = `<div class="bug bug-${bug.type}">👾</div>`;
+                        }
+                    }
+                }
+                gridEl.appendChild(cell);
+            }
+        }
+        stepsEl.textContent = steps;
+        scoreEl.textContent = score;
+    }
+
+    // --- Movement ---
+    document.addEventListener('keydown', (e) => {
+        if (activeBug) return; // Frozen combat
+        if (score <= 0) return; // Game Over logic (optional)
+
+        let newX = playerPos.x;
+        let newY = playerPos.y;
+
+        if (e.key === 'ArrowRight') newX++;
+        if (e.key === 'ArrowLeft') newX--;
+        if (e.key === 'ArrowDown') newY++;
+        if (e.key === 'ArrowUp') newY--;
+
+        // Bounds
+        if (newX < 0 || newX >= gridSize || newY < 0 || newY >= gridSize) return;
+
+        // Wall Collision
+        if (mazeLayout[newY][newX] === 1) return;
+
+        // Update Steps
+        steps++;
+        score = Math.max(0, 1000 - (steps * 10)); // Lose 10 pts per step
+
+        // Bug Collision
+        const bug = bugs.find(b => b.x === newX && b.y === newY && b.alive);
+        if (bug) {
+            startCombat(bug);
+            return;
+        }
+
+        playerPos = { x: newX, y: newY };
+        drawWorld();
+        
+        // Goal Check
+        if (playerPos.x === goalPos.x && playerPos.y === goalPos.y) {
+            alert('¡NIVEL COMPLETADO! Puntuación final: ' + score);
+            window.location.href = "{{ path('app_game') }}";
+        }
+    });
+
+    // --- Combat System ---
+    const overlay = document.getElementById('combat-overlay');
+    const taskEl = document.getElementById('combat-task');
+    const paletteEl = document.getElementById('palette-area');
+    const consoleOut = document.getElementById('console-output');
+    const workspace = document.getElementById('workspace');
+
+    function startCombat(bug) {
+        activeBug = bug;
+        overlay.style.display = 'flex';
+        taskEl.textContent = "Misión: " + bug.task;
+        consoleOut.innerHTML = 'System ready...<br>> Waiting for code...';
+        workspace.innerHTML = '';
+        
+        // Render Palette
+        paletteEl.innerHTML = '<div class="palette-label">Bloques Disponibles</div>';
+        bug.blocks.forEach(block => {
+            const div = document.createElement('div');
+            div.className = 'code-block';
+            div.draggable = true;
+            div.dataset.type = block.type;
+            div.innerHTML = block.html;
+            
+            // Drag Events
+            div.addEventListener('dragstart', () => div.classList.add('dragging'));
+            div.addEventListener('dragend', () => div.classList.remove('dragging'));
+            
+            paletteEl.appendChild(div);
+        });
+    }
+
+    // Drag & Drop Handlers for Workspace
+    workspace.addEventListener('dragover', e => {
+        e.preventDefault();
+        workspace.classList.add('drag-over');
+    });
+    workspace.addEventListener('dragleave', () => workspace.classList.remove('drag-over'));
+    workspace.addEventListener('drop', e => {
+        e.preventDefault();
+        workspace.classList.remove('drag-over');
+        const draggable = document.querySelector('.dragging');
+        if (!draggable) return;
+
+        const clone = draggable.cloneNode(true);
+        clone.classList.remove('dragging');
+        clone.draggable = false;
+        clone.style.cursor = 'no-drop';
+        clone.onclick = function() { this.remove(); };
+        workspace.appendChild(clone);
+    });
+
+    window.runCombatCode = function() {
+        if (!activeBug) return;
+
+        const userBlocks = Array.from(workspace.children).map(el => el.dataset.type);
+        const correctSequence = activeBug.solution;
+
+        // Check exact sequence
+        const isCorrect = JSON.stringify(userBlocks) === JSON.stringify(correctSequence);
+
+        if (isCorrect) {
+            consoleOut.innerHTML += '<br><span style="color: #2ecc71;">> SUCCESS! Code executed.</span>';
+            score += 500; // Bonus for kill
+            
+            setTimeout(() => {
+                activeBug.alive = false;
+                activeBug = null;
+                overlay.style.display = 'none';
+                drawWorld();
+            }, 1000);
+        } else {
+            consoleOut.innerHTML += '<br><span style="color: #e74c3c;">> ERROR: Syntax Invalid.</span>';
+            score = Math.max(0, score - 50); // Penalty
+            scoreEl.textContent = score;
+        }
+    };
+
+    drawWorld();
+</script>
+{% endblock %}
